@@ -4,15 +4,15 @@ Parameters:
 
   YourAccID:    
     Type: String
-    Default: "152886774254"               #<--- Pass your aws account id
+    Default: "1111111111111"               #<--- Pass your aws account id
   
   OtherAccID:    
     Type: String
-    Default: "032977620247"               #<--- Pass another aws account id
+    Default: "222222222222"               #<--- Pass another aws account id
   
   BuckName:    
     Type: String
-    Default: "ab-bucky-0912345"           #<--- Pass S3 bucket name (unique one)
+    Default: "ab-bucky-09"           #<--- Pass S3 bucket name (unique one)
   
   IAMRoleName:    
     Type: String
