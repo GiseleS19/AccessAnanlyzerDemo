@@ -1,0 +1,277 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+
+  YourAccID:    
+    Type: String
+    Default: "152886774254"               #<--- Pass your aws account id
+  
+  OtherAccID:    
+    Type: String
+    Default: "032977620247"               #<--- Pass another aws account id
+  
+  BuckName:    
+    Type: String
+    Default: "ab-bucky-0912345"           #<--- Pass S3 bucket name (unique one)
+  
+  IAMRoleName:    
+    Type: String
+    Default: "IAMRoleForAccessAnalyzer"   #<--- Pass IAMAccessAnalyzerRole name
+ 
+  LambdaFuncName:
+    Type: String
+    Default: "CFLambda"                   #<--- Pass Lambda name
+  
+  IAMAnalyzerName:
+    Type: String
+    Default: "ACCESS_ANALYZER_DEMO"       #<--- Pass IAMAccessAnalyzer name
+  
+  IAMAnalyzerType:
+    Type: String
+    Default: "ACCOUNT"                    #<--- Pass Analyzer Type
+
+#Optionals:
+
+  lambdaIAMRole:
+    Type: String
+    Default: "CFLambdaRole"               #<--- Pass Lambdarole name
+
+  SQSQueueName:
+    Type: String
+    Default: "DemoQueue"          #<--- Pass SQS name
+  
+
+Resources:
+
+  S3Bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Ref BuckName
+      AccessControl: PublicRead
+      PublicAccessBlockConfiguration:
+            BlockPublicAcls : false
+            BlockPublicPolicy : false
+            IgnorePublicAcls : false
+            RestrictPublicBuckets : false
+  
+  ForIAMAccessAnalyzerRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:        
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: 
+                - !Sub 'arn:aws:iam::${OtherAccID}:root'              
+            Action: sts:AssumeRole
+      RoleName: !Ref IAMRoleName
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite 
+        - arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser               
+      Policies:
+        - PolicyName: AWS-IAMAccessAnalyzer-Service
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Action: 
+                - s3:*                
+              Resource:
+              - !Sub arn:aws:s3:::${S3Bucket}
+              - !Sub arn:aws:s3:::${S3Bucket}/*
+              Effect: Allow
+            - Action:
+              - lambda:*
+              - lambda:InvokeAsync
+              - lambda:InvokeFunction
+              Resource:
+              - !Sub arn:aws:lambda:us-east-1:${YourAccID}:function:${LambdaFuncName}
+              Effect: Allow
+            - Action:
+              - kms:*
+              Resource:
+              - !Sub arn:aws:kms:us-east-1:${YourAccID}:key/*
+              Effect: Allow
+            - Action:
+              - secretsmanager:*
+              Resource:
+              - !Sub arn:aws:secretsmanager:us-east-1:${YourAccID}:secret:/*
+              Effect: Allow
+            - Effect: Allow
+              Action:              
+              - ec2:DescribeAddresses
+              - ec2:DescribeByoipCidrs
+              - ec2:DescribeVpcEndpoints
+              - ec2:DescribeVpcs              
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:ListAttachedRolePolicies
+              - iam:ListRolePolicies
+              - iam:ListRoles
+              - iam:GetAccountSummary
+              - kms:ListAliases
+              - kms:DescribeKey
+              - kms:GetKeyPolicy
+              - kms:ListGrants
+              - kms:ListKeyPolicies
+              - kms:ListKeys
+              - lambda:GetAccountSettings
+              - lambda:GetFunction
+              - lambda:GetFunctionUrlConfig
+              - lambda:GetLayerVersionPolicy
+              - lambda:GetPolicy
+              - lambda:Get*
+              - lambda:List*
+              - lambda:ListAliases
+              - lambda:ListFunctions
+              - lambda:ListLayers
+              - lambda:ListLayerVersions
+              - lambda:ListVersionsByFunction
+              - organizations:DescribeAccount
+              - organizations:DescribeOrganization
+              - organizations:DescribeOrganizationalUnit
+              - organizations:ListAccounts
+              - organizations:ListAccountsForParent
+              - organizations:ListAWSServiceAccessForOrganization
+              - organizations:ListChildren
+              - organizations:ListDelegatedAdministrators
+              - organizations:ListOrganizationalUnitsForParent
+              - organizations:ListParents
+              - organizations:ListRoots
+              - s3:DescribeMultiRegionAccessPointOperation
+              - s3:GetAccessPoint
+              - s3:GetAccessPointPolicy
+              - s3:GetAccessPointPolicyStatus
+              - s3:GetAccountPublicAccessBlock
+              - s3:GetBucketAcl
+              - s3:GetBucketLocation
+              - s3:GetBucketPolicyStatus
+              - s3:GetBucketPolicy
+              - s3:GetBucketPublicAccessBlock
+              - s3:GetMultiRegionAccessPoint
+              - s3:GetMultiRegionAccessPointPolicy
+              - s3:GetMultiRegionAccessPointPolicyStatus
+              - s3:ListAccessPoints
+              - s3:ListAllMyBuckets
+              - s3:ListMultiRegionAccessPoints
+              - sns:GetTopicAttributes
+              - sns:ListTopics
+              - secretsmanager:DescribeSecret
+              - secretsmanager:GetResourcePolicy
+              - secretsmanager:ListSecrets
+              - sqs:GetQueueAttributes
+              - sqs:ListQueues
+              - tag:GetResources
+              Resource: "*"
+
+  KmsKey:
+    DependsOn:
+      - ForIAMAccessAnalyzerRole
+    Type: "AWS::KMS::Key"
+    Properties:
+      EnableKeyRotation: false
+      MultiRegion: false
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Allow an root account to use this KMS key
+            Effect: Allow
+            Principal:
+              AWS:
+              - !Sub 'arn:aws:iam::${YourAccID}:root'              
+            Action: "*"            
+            Resource: "*"
+
+          - Sid: Allow an external account to use this KMS key
+            Effect: Allow
+            Principal:
+              AWS:              
+              - !Sub 'arn:aws:iam::${OtherAccID}:root'
+            Action:
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:ReEncrypt*
+            - kms:GenerateDataKey*
+            - kms:DescribeKey
+            Resource:
+              - !Sub arn:aws:kms:us-east-1:${YourAccID}:key/*
+
+  LambdaRole:
+    DependsOn:
+      - ForIAMAccessAnalyzerRole
+    Type: 'AWS::IAM::Role'        
+    Properties:
+      RoleName: !Ref lambdaIAMRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+              AWS:
+                - !Sub "arn:aws:iam::${OtherAccID}:root"  
+                            
+            Action: 'sts:AssumeRole'
+            
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole        
+      Policies:
+        - PolicyName: LambdaRoleInlinePolicy
+          PolicyDocument:
+            Version: 2012-10-17            
+            Statement:
+              - Effect: Allow
+                Action: lambda:*           
+                Resource:
+                  - !Sub 'arn:aws:lambda:us-east-1:${YourAccID}:function:${LambdaFuncName}'
+                    
+  MyQueue:
+    DependsOn:
+      - LambdaRole
+    Type: AWS::SQS::Queue
+    Properties: 
+      QueueName: !Ref SQSQueueName
+        
+  Secret:
+    DependsOn:
+      - LambdaRole
+    Type: "AWS::SecretsManager::Secret"
+    Properties:
+      Name: "bruce"
+      Description: "sample secret"
+      KmsKeyId: "alias/aws/secretsmanager"
+      GenerateSecretString:        
+        PasswordLength: 8
+
+  LambdaFunc:
+    DependsOn:
+      - LambdaRole  
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaFuncName
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.6
+      Handler: index.handler
+      Timeout: 30
+      Code:
+        ZipFile: !Sub
+          |         
+          def handler(event, context):
+            
+            ab = "Hello Universe!"
+            print(ab)
+            return ab
+
+  AccessAnalyzer:
+    DependsOn:
+      - ForIAMAccessAnalyzerRole  
+    Type: "AWS::AccessAnalyzer::Analyzer"
+    Properties:
+      Type: !Ref IAMAnalyzerType
+      AnalyzerName: !Ref IAMAnalyzerName
+  
